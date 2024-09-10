@@ -1,6 +1,6 @@
 addpath('./methods/')
 addpath('./tools/')
-K = 14:4:50;
+K = 22:4:46;%;14:4:50;
 %K = 30;
 Sigma = 0.06:0.02:0.1;
 d = 2;
@@ -11,23 +11,36 @@ e12 =  zeros(length(Sigma),length(K));
 e21 = zeros(length(Sigma),length(K));
 e22 =  zeros(length(Sigma),length(K));
 
-Z = cell(5,length(Sigma),length(K));
+Z = cell(6,length(Sigma),length(K));
 T = cell(1,length(Sigma));
+Time = zeros(1,6);
 for s = 1:length(Sigma)
     sigma = Sigma(s);
     [T{s}, X] = generate_data3(sigma, num);
     for k = 1:length(K)
         neig = K(k);
-        [Z{1,s,k},ZT{1,s,k}] = QMF(X, neig, d);
+        t1 = cputime;
+        [Z{1,s,k},ZT{1,s,k}] = SQMF(X, neig, d);
+        t2 = cputime;
         [Z{2,s,k},ZT{2,s,k},~] = MovingLS(X, X, neig, d);
+        t3 = cputime;
         [Z{3,s,k},ZT{3,s,k}] = linear_log_KDE(neig,X,X,d);
+        t4 = cputime;
         [Z{4,s,k},ZT{4,s,k}] = linear_mfit(X,X,d,neig);
+        t5 = cputime;
         [Z{5,s,k},ZT{5,s,k}] = PCA_refine(X,X,neig,d);
+        t6 = cputime;
+        [Z{6,s,k},ZT{6,s,k}] = RQMF_(X, neig, d, 0.01);
+        t7 = cputime;
+        Time = Time + [t2-t1,t3-t2,t4-t3,t5-t4,t6-t5,t7-t6];
     end
 end
+Time = Time/length(Sigma)/length(K);
 %%
-Methods = {'QMF','MLS','LKDE','MFIT','PCA'};
-for t = 1:5
+e = zeros(6,length(Sigma),length(K));
+et = zeros(6,length(Sigma),length(K));
+Methods = {'SQMF','MLS','LKDE','MFIT','PCA','QMF'};
+for t = 1:6
     for s = 1:length(Sigma)
         for k = 1:length(K)
            [e(t,s,k),et(t,s,k)] = Compute_Error(Z{t,s,k}, ZT{t,s,k}, T{s});   
@@ -41,7 +54,7 @@ end
 %%
 RE = [];
 RET = [];
-for t = 1:5
+for t = 1:6
     RE = [RE;reshape(e(t,:,:),length(Sigma),length(K))/num];
     RET = [RET;reshape(et(t,:,:),length(Sigma),length(K))/num];
 end
@@ -50,16 +63,17 @@ fprintf('\n')
 format_print(RET)
 
 format_print([RE,RET])
-%%
-format_print([RE(:,2:end),RET(:,2:end)])
 
-function [Z,ZT] = QMF(X, neig, d)
+fprintf('\n')
+format_print([RE(:,1:end),RET(:,1:end)])
+
+function [Z,ZT] = SQMF(X, neig, d)
        Z = zeros(size(X));
        ZT = cell(1,size(X,2));
        D = size(X,1);
        for i = 1:size(X,2)
             Y = find_nearest(X(:,i),X, neig);
-            [Q, x0, Theta, ~, ~] = Factorization(Y,d);
+            [Q, x0, Theta, ~, ~] = Factorization3(Y,d,40,3,0,1);
             ti = (Q(:,1:d))'*(X(:,i)-x0);
             ti = Projection(x0, Q, Theta, X(:,i), d, ti, 1);
             [~, M] = Psi(ti, Theta);
@@ -74,6 +88,32 @@ function [Z,ZT] = QMF(X, neig, d)
         %re(k,s) = norm(Z-T,'fro')^2;
         %fprintf('K=%d,s=%d,error=%.3f,error2=%.3f\n',k,s,re(k,s),re_tangent(k,s));
 end
+
+function [Z,ZT] = RQMF_(X, neig, d, rho)
+       Z = zeros(size(X));
+       ZT = cell(1,size(X,2));
+       D = size(X,1);
+       for i = 1:size(X,2)
+            Y = find_nearest(X(:,i),X, neig);
+
+            Temp = Y-mean(Y,2);
+            [~, ~, V] = svd(Temp);
+            Tau = qrs(V(:,1:d)');
+            
+            [f, ~] = RQMF(Y, Tau, rho, 0);
+            tau = projection(X(:,i), f.A, f.B, f.c, zeros(d,1));
+            Z(:,i) = f.Parm*Construct_Higher_Order(tau);
+            [Qr,~] = qr(f.A);
+            ZT{i} = Qr(:,1:d)*Qr(:,1:d)';
+            %ZT{i} = T*T';
+            %Pr = eye(D)-X(:,i)*X(:,i)'/(norm(X(:,i))^2);
+            %re_tangent(k,s) = re_tangent(k,s)+norm(P-Pr,'fro')^2;
+            fprintf('the %d th sample\n',i);
+       end
+        %re(k,s) = norm(Z-T,'fro')^2;
+        %fprintf('K=%d,s=%d,error=%.3f,error2=%.3f\n',k,s,re(k,s),re_tangent(k,s));
+end
+
 
 function T = Tangent_Estimation(tau, U, V, Theta, d, D)
 

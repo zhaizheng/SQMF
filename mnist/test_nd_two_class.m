@@ -40,23 +40,27 @@ Tau = qrs(V(:,1:d)');
 %[Q_F, x0_F, Theta_F, Tau_F, error] = Factorization(X,d);
 ND = [1,2,3,4,5,6];
 INDS  = sort(randperm(300,M));
-Final = [];
-%%
-for t = 1:length(ND)
-    total  = 100; alg = 3; lambda = 0.8; nd = ND(t);
-    [Q_F, x0_F, Theta_F, Tau_F, error] = Factorization3(X,d,total,alg,lambda, nd);
 
-    RREE = zeros(3,length(ND));
-    for i = 1:length(INDS)
-        k = INDS(i);
-        RREE(1,i) = norm(X(:,k)-Rc(:,k))^2;
-        [~, M_F] = Psi(Tau_F(:,k), Theta_F);
-        mg_vec  = x0_F + Q_F*M_F;
-       % mg_vec = f.Parm*Construct_Higher_Order(embedding(:,k));
-        RREE(2,i) = norm(X(:,k)-mg_vec)^2; 
-        RREE(3,i) = (RREE(1,i)-RREE(2,i))/RREE(1,i);
+%%
+Lambda = 0:0.2:0.8;
+Final = [];
+for L = 1:length(Lambda)
+    for t = 1:length(ND)
+        total  = 100; alg = 3; lambda = Lambda(L); nd = ND(t);
+        [Q_F, x0_F, Theta_F, Tau_F, error] = Factorization3(X,d,total,alg,lambda, nd);
+    
+        RREE = zeros(3,length(ND));
+        for i = 1:length(INDS)
+            k = INDS(i);
+            RREE(1,i) = norm(X(:,k)-Rc(:,k))^2;
+            [~, M_F] = Psi(Tau_F(:,k), Theta_F);
+            mg_vec  = x0_F + Q_F*M_F;
+           % mg_vec = f.Parm*Construct_Higher_Order(embedding(:,k));
+            RREE(2,i) = norm(X(:,k)-mg_vec)^2; 
+            RREE(3,i) = (RREE(1,i)-RREE(2,i))/RREE(1,i);
+        end
+        Final = [Final,[mean(RREE(1,:)),mean(RREE(2,:)),mean(RREE(3,:))]'];
     end
-    Final = [Final,[mean(RREE(1,:)),mean(RREE(2,:)),mean(RREE(3,:))]'];
 end
 
 

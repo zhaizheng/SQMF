@@ -1,6 +1,7 @@
 %%
 addpath('./../')
 addpath('./../methods/')
+addpath('/home/zzh/Documents/JASA_CODE/mnist')
 data = load('frey_rawface.mat');
 X = double(data.ff);
 
@@ -10,7 +11,7 @@ neig = 300;
 d = 2;
 
 Sigma = 30;
-K = 16;%:4:32;
+K = 16:4:32;
 error = zeros(length(Sigma),length(K),6,5);
 Ind = 38:40;%31:40;%[100,200,300,400,500,600];
 
@@ -19,22 +20,37 @@ for s = 1 %1:length(Sigma)
     NX = X+Sigma(s)*rand(size(X));
     for k = 1:length(K)
         figure(k)
-        tl = tiledlayout(length(Ind),7,'TileSpacing','compact');
+        tl = tiledlayout(length(Ind),10,'TileSpacing','compact');
         for n = 1:length(Ind)
             ind = Ind(n);
             input = NX(:,ind);
             in_true = X(:,ind);
-            R1 = QMF(input, NX, K(k), d);
+            
+
+            R1 = SQMF(input, NX, K(k), d);
             [R2,~,~] = MovingLS(NX, input, K(k), d);
-            %%
             [R3,~] = linear_log_KDE(K(k), NX, input, d);
             [R4,~] = linear_mfit(NX, input, d, K(k));
             [R5,~] = PCA_refine(input, NX, K(k), d);
+    
+            rep = 3; alpha = 0.8; gamma = 1;
+            Xout = SAME(NX, K(k), d, rep, alpha, gamma);
+            R6 = Xout(:,ind);
+            
+            [R7,~,~,~] =  Spherelet(input, NX, K(k), d);
+
+            R8 = RQMF_(input, NX, K(k), d, 0.1);
+
+
             error(s,k,n,1) = norm(R1-in_true,'fro')^2;
             error(s,k,n,2) = norm(R2-in_true,'fro')^2;
             error(s,k,n,3) = norm(R3-in_true,'fro')^2;
             error(s,k,n,4) = norm(R4-in_true,'fro')^2;
             error(s,k,n,5) = norm(R5-in_true,'fro')^2;
+            error(s,k,n,6) = norm(R6-in_true,'fro')^2;
+            error(s,k,n,7) = norm(R7-in_true,'fro')^2;
+            error(s,k,n,8) = norm(R8-in_true,'fro')^2;
+            
             fprintf('error1:%f,error2:%f,error3:%f,error4:%f,error5:%f\n', ...
                 norm(R1-in_true).^2,norm(R2-in_true).^2,norm(R3-in_true).^2,norm(R4-in_true).^2,norm(R5-in_true).^2)
             nexttile
@@ -51,6 +67,12 @@ for s = 1 %1:length(Sigma)
             imshow(uint8(reshape(R4,[20,28]))');
             nexttile
             imshow(uint8(reshape(R5,[20,28]))');
+            nexttile
+            imshow(uint8(reshape(R6,[20,28]))');
+            nexttile
+            imshow(uint8(reshape(R7,[20,28]))');
+            nexttile
+            imshow(uint8(reshape(R8,[20,28]))');
         end
     end
 end
@@ -158,8 +180,18 @@ end
 %         %fprintf('K=%d,s=%d,error=%.3f,error2=%.3f\n',k,s,re(k,s),re_tangent(k,s));
 % end
 
+function R = RQMF_(input, X, neig, d, rho)
+    Y = find_nearest(input, X, neig);
+    Temp = Y-mean(Y,2);
+    [~, ~, V] = svd(Temp);
+    Tau = qrs(V(:,1:d)');
 
-function R = QMF(input, X, neig, d)
+    [f, ~] = RQMF(Y, Tau, rho,0);
+    tau = projection(input, f.A, f.B, f.c, zeros(d,1));
+    R = f.Parm*Construct_Higher_Order(tau);
+end
+
+function R = SQMF(input, X, neig, d)
     alg = 3;
     nd = 3;
     lambda = 1;

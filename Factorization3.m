@@ -54,7 +54,7 @@ function Tau = Projection(x0, Q, Theta, X, d, Tau, alg, nd, lambda)
             for iter = 1:1000
                 [g, H] = gradient(tau, s, c, A, lambda);
                 tau = tau - pinv(H)*g;   
-                if norm(g)<1.e-5
+                if norm(g)<1.e-7
                     break;
                 end
                 %fprintf('projection tau %d,step: %f,norm of gradient:%f\n', i, step, norm(gradient(tau, s, c, A)));
